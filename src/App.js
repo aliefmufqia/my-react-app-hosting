@@ -1,583 +1,853 @@
-import React, { useState, useMemo, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 
-/* =========================
-   Config / Initial Data
-   ========================= */
-const MEMORY_SIZE = 1000;
-const INITIAL_BLOCKS = [
-    { id: 1, start: 0, size: 200, status: "free" },
-    { id: 2, start: 200, size: 300, status: "busy", processId: "P1" },
-    { id: 3, start: 500, size: 500, status: "free" },
-];
+// -------------------- Utilities & Icons --------------------
 
+// Simple Icons as Components to avoid external dependencies
+const Icons = {
+  CreditCard: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>,
+  Smartphone: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>,
+  Lock: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>,
+  Clock: () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
+  CheckCircle: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>,
+  ChevronLeft: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>,
+  Calendar: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
+  MapPin: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>,
+  ShieldCheck: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+};
 
-const HomeIcon = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>;
-const ChipIcon = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L3 12l5.714-2.143L11 3z"></path></svg>;
-const CodeIcon = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 20l4-16m4 4l4 4m-4 4l-4 4m-4-4l-4-4m-4 4l-4-4"></path></svg>;
-const MenuIcon = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>;
+function generateSeats(rows = 6, cols = 8) {
+  const seats = [];
+  for (let r = 0; r < rows; r++) {
+    const rowLetter = String.fromCharCode(65 + r); // A, B, C...
+    for (let c = 1; c <= cols; c++) {
+      seats.push({ id: rowLetter + c, booked: false });
+    }
+  }
+  return seats;
+}
 
-/* =========================
-   Memory Simulator Component
-   ========================= */
-const MemorySimulator = () => {
-    const [memoryBlocks, setMemoryBlocks] = useState(INITIAL_BLOCKS);
-    const [newProcessSize, setNewProcessSize] = useState("");
-    const [nextProcessId, setNextProcessId] = useState(2);
-    const [algorithm, setAlgorithm] = useState("first");
-    const [recentlyAdded, setRecentlyAdded] = useState([]);
-    const [narasi, setNarasi] = useState("");
+function sampleMovies() {
+  const baseMovies = [
+    {
+      id: "f1",
+      title: "Langit Merah",
+      genre: "Drama / Petualangan",
+      duration: "2j 10m",
+      rating: "13+",
+      price: 45000,
+      image: "https://awsimages.detik.net.id/community/media/visual/2022/05/12/langit-merah-4.png?w=860.jpg",
+      synopsis: "Film Langit Merah menceritakan perjalanan seorang pemuda dalam menghadapi konflik di desanya.",
+      cast: ["Ari Wibowo", "Rina Hasyim", "Joko Anwar"],
+      trailer: "https://www.youtube.com/embed/dQw4w9WgXcQ",
+      schedules: [
+        { id: "s1", date: "2025-12-03", time: "12:00", studio: "Studio 1" },
+        { id: "s2", date: "2025-12-03", time: "15:00", studio: "Studio 1" },
+        { id: "s3", date: "2025-12-03", time: "18:00", studio: "Studio 2" },
+      ],
+      seats: generateSeats(),
+    },
+    {
+      id: "f2",
+      title: "Malam di Kota",
+      genre: "Thriller",
+      duration: "1j 55m",
+      rating: "17+",
+      price: 50000,
+      image: "https://tse1.mm.bing.net/th/id/OIP.V9AJAC0vH8Jtska5o0I91wHaEK?rs=1&pid=ImgDetMain&o=7&rm=3.jpg",
+      synopsis: "Seorang detektif mencoba mengungkap misteri pembunuhan yang terjadi di kota besar.",
+      cast: ["Budi Santoso", "Tina Talisa", "Doni Alamsyah"],
+      trailer: "https://www.youtube.com/embed/dQw4w9WgXcQ",
+      schedules: [
+        { id: "s4", date: "2025-12-03", time: "13:00", studio: "Studio 2" },
+        { id: "s5", date: "2025-12-03", time: "16:30", studio: "Studio 2" },
+        { id: "s6", date: "2025-12-03", time: "20:00", studio: "Studio 3" },
+      ],
+      seats: generateSeats(),
+    },
+    {
+      id: "f3",
+      title: "Komedi Cinta",
+      genre: "Romcom",
+      duration: "2j 05m",
+      rating: "SU",
+      price: 40000,
+      image: "https://media.suara.com/pictures/970x544/2023/12/30/80632-film-jatuh-cinta-seperti-di-film-film.jpg",
+      synopsis: "Kisah romantis lucu antara dua sahabat yang akhirnya saling jatuh cinta.",
+      cast: ["Luna Maya", "Raffi Ahmad", "Aurelie Moeremans"],
+      trailer: "https://www.youtube.com/embed/dQw4w9WgXcQ",
+      schedules: [
+        { id: "s7", date: "2025-12-03", time: "10:00", studio: "Studio 1" },
+        { id: "s8", date: "2025-12-03", time: "14:00", studio: "Studio 3" },
+        { id: "s9", date: "2025-12-03", time: "19:00", studio: "Studio 4" },
+      ],
+      seats: generateSeats(),
+    },
+  ];
 
-    const sortBlocks = (blocks) => [...blocks].sort((a, b) => a.start - b.start);
+  const additionalMovies = [
+    { id: "f4", title: "Jalur Cepat", genre: "Action / Racing", image: "https://tse4.mm.bing.net/th/id/OIP.QYL05udUTWCzEFLXQh4-owHaLH?rs=1&pid=ImgDetMain&o=7&rm=3.jpg", synopsis: "Balapan liar di jalanan ibukota memicu adrenalin tinggi." },
+    { id: "f5", title: "Hutan Terlarang", genre: "Horror / Misteri", image: "https://i.ytimg.com/vi/b-9yU33znh0/maxresdefault.jpg", synopsis: "Sekelompok mahasiswa tersesat di hutan yang menyimpan kutukan lama." },
+    { id: "f6", title: "Dunia Ajaib", genre: "Animasi / Keluarga", image: "https://lumiere-a.akamaihd.net/v1/images/p_encanto_homeent_22359_4892ae1c.jpeg", synopsis: "Petualangan magis seorang anak di dunia penuh warna." },
+    { id: "f7", title: "Legenda Naga", genre: "Fantasy / Action", image: "https://m.media-amazon.com/images/M/MV5BMjM2MDgxMDg0Nl5BMl5BanBnXkFtZTgwNTM2OTM5NDE@._V1_.jpg", synopsis: "Seorang ksatria mencari naga terakhir untuk menyelamatkan kerajaannya." },
+    { id: "f8", title: "Misi Rahasia", genre: "Action / Spy", image: "https://m.media-amazon.com/images/M/MV5BMjAxMzY3NjcxNF5BMl5BanBnXkFtZTcwNTI5OTM0Mw@@._V1_FMjpg_UX1000_.jpg", synopsis: "Agen rahasia harus menghentikan peluncuran senjata berbahaya." },
+    { id: "f9", title: "Cinta di Paris", genre: "Romance / Drama", image: "https://tse4.mm.bing.net/th/id/OIP.3YM0lZnjNb0FabVsbYl6xAHaHa?rs=1&pid=ImgDetMain&o=7&rm=3.jpg", synopsis: "Kisah cinta lama yang bersemi kembali di kota Paris." },
+    { id: "f10", title: "Detektif Cilik", genre: "Komedi / Keluarga", image: "https://m.media-amazon.com/images/M/MV5BMTg4MDk1ODExN15BMl5BanBnXkFtZTgwNzIyNjg3MDE@._V1_.jpg", synopsis: "Sekelompok anak-anak memecahkan misteri hilangnya kucing tetangga." }
+  ];
 
-    const coalesceFreeBlocks = (blocks) => {
-        const sorted = sortBlocks(blocks);
-        const result = [];
-        for (let i = 0; i < sorted.length; i++) {
-            const b = sorted[i];
-            if (result.length === 0) {
-                result.push({ ...b });
-            } else {
-                const last = result[result.length - 1];
-                if (last.status === "free" && b.status === "free" && last.start + last.size === b.start) {
-                    last.size += b.size;
-                } else {
-                    result.push({ ...b });
-                }
-            }
-        }
-        return result;
-    };
+  const fullAdditionalMovies = additionalMovies.map(m => ({
+    ...m,
+    duration: "1j 45m",
+    rating: "13+",
+    price: 45000,
+    cast: ["Aktor A", "Aktris B", "Aktor C"],
+    trailer: "https://www.youtube.com/embed/dQw4w9WgXcQ",
+    schedules: [
+      { id: `s_${m.id}`, date: "2025-12-04", time: "14:00", studio: "Studio X" },
+      { id: `s_${m.id}_2`, date: "2025-12-04", time: "19:00", studio: "Studio X" }
+    ],
+    seats: generateSeats()
+  }));
 
-    const findTargetIndexByAlgorithm = (blocks, sizeNum, algo) => {
-        const freeBlocks = blocks
-            .map((b, idx) => ({ block: b, idx }))
-            .filter(({ block }) => block.status === "free" && block.size >= sizeNum);
+  return [...baseMovies, ...fullAdditionalMovies];
+}
 
-        if (!freeBlocks.length) return -1;
-        if (algo === "first") return freeBlocks[0].idx;
-        if (algo === "best") return freeBlocks.reduce((best, c) => (c.block.size < best.block.size ? c : best)).idx;
-        if (algo === "worst") return freeBlocks.reduce((w, c) => (c.block.size > w.block.size ? c : w)).idx;
-        return -1;
-    };
+function generateTicket({ movie, schedule, seats, user }) {
+  const code = "CX-" + Math.random().toString(36).substring(2, 9).toUpperCase();
+  return { movie, schedule, seats, user, code };
+}
 
-    const allocateMemory = (size) => {
-        const sizeNum = parseInt(size, 10);
-        if (isNaN(sizeNum) || sizeNum <= 0) {
-            setNarasi("Ukuran tidak valid.\nMasukkan nilai positif yang benar.");
-            return alert("Ukuran proses tidak valid.");
-        }
+function QRCodeSVG({ value = "QR" }) {
+  const s = 80;
+  return (
+    <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`} className="inline-block bg-white p-1 rounded shadow-sm">
+      <rect x="4" y="4" width="20" height="20" fill="#0f172a" />
+      <rect x="56" y="4" width="20" height="20" fill="#0f172a" />
+      <rect x="4" y="56" width="20" height="20" fill="#0f172a" />
+      <rect x="34" y="34" width="6" height="6" fill="#0f172a" />
+      <rect x="44" y="44" width="6" height="6" fill="#0f172a" />
+      <rect x="24" y="44" width="6" height="6" fill="#0f172a" />
+    </svg>
+  );
+}
 
-        const idx = findTargetIndexByAlgorithm(memoryBlocks, sizeNum, algorithm);
-        if (idx === -1) {
-            setNarasi("Tidak ditemukan blok memori yang sesuai.\nAlokasi gagal dilakukan.");
-            return alert("Tidak ada blok yang cukup besar.");
-        }
+// -------------------- Main App --------------------
 
-        const pid = nextProcessId;
-        const blocksCopy = [...memoryBlocks];
-        const target = blocksCopy[idx];
+export default function App() {
+  const [user, setUser] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("user")) || null; } catch { return null; }
+  });
 
-        const newId = Date.now() + Math.floor(Math.random() * 1000);
-        const alloc = {
-            id: newId,
-            start: target.start,
-            size: sizeNum,
-            status: "busy",
-            processId: `P${pid}`,
-        };
+  const [page, setPage] = useState("now_playing");
+  const [movies] = useState(sampleMovies());
+  
+  const [selectedMovie, setSelectedMovie] = useState(null);
+  const [selectedSchedule, setSelectedSchedule] = useState(null);
+  const [selectedSeats, setSelectedSeats] = useState([]);
+  
+  const [ticket, setTicket] = useState(null);
+  const [tickets, setTickets] = useState([]);
 
-        const remaining = target.size - sizeNum;
-        if (remaining > 0) {
-            blocksCopy.splice(idx, 1, alloc, {
-                id: newId + 1,
-                start: target.start + sizeNum,
-                size: remaining,
-                status: "free",
-            });
-        } else {
-            blocksCopy.splice(idx, 1, alloc);
-        }
+  useEffect(() => { if (!user) setPage("now_playing"); }, [user]);
 
-        const sorted = sortBlocks(blocksCopy);
-        setMemoryBlocks(sorted);
+  const login = (name) => {
+    const u = { name };
+    localStorage.setItem("user", JSON.stringify(u));
+    setUser(u);
+  };
+
+  const logout = () => {
+    localStorage.removeItem("user");
+    setUser(null);
+    setPage("now_playing");
+    setSelectedMovie(null);
+    setSelectedSchedule(null);
+    setSelectedSeats([]);
+    setTicket(null);
+    setTickets([]);
+  };
+
+  const startBooking = (movie) => {
+    setSelectedMovie(movie);
+    setSelectedSchedule(null);
+    setSelectedSeats([]);
+    setTicket(null);
+    setPage("book");
+  };
+
+  const proceedToPayment = () => {
+    if (!user) { setPage("login"); return; }
+    if (!selectedSchedule || selectedSeats.length === 0) { alert("Pilih jadwal dan kursi terlebih dahulu."); return; }
+    setPage("payment");
+  };
+
+  const completePayment = (paymentDetails) => {
+    const newTicket = generateTicket({ movie: selectedMovie, schedule: selectedSchedule, seats: selectedSeats, user });
+    newTicket.payment = paymentDetails;
+    setTickets((prevTickets) => [...prevTickets, newTicket]);
+    setTicket(newTicket);
+    setPage("ticket");
+  };
+
+  return (
+    <div className="min-h-screen bg-[#0A0A0A] text-[#F8F8F8] font-sans selection:bg-[#D4AF37] selection:text-black">
+      <header className="bg-[#111111]/80 backdrop-blur-md border-b border-[#D4AF37]/20 sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="text-[#D4AF37] font-bold text-xl tracking-wider flex items-center gap-2 cursor-pointer" onClick={() => setPage("home")}>
+              <span className="text-2xl">⚡</span> CineX GOLD
+            </div>
+            <nav className="hidden md:flex gap-3 text-sm text-[#C0C0C0] ml-6">
+              <button onClick={() => setPage("home")} className={`px-4 py-2 rounded-full transition ${page === 'home' ? 'text-black bg-[#D4AF37] font-bold' : 'hover:text-[#F2D675]'}`}>Beranda</button>
+              <button onClick={() => setPage("now_playing")} className={`px-4 py-2 rounded-full transition ${page === 'now_playing' ? 'text-black bg-[#D4AF37] font-bold' : 'hover:text-[#F2D675]'}`}>Sedang Tayang</button>
+              {user && <button onClick={() => setPage("history")} className={`px-4 py-2 rounded-full transition ${page === 'history' ? 'text-black bg-[#D4AF37] font-bold' : 'hover:text-[#F2D675]'}`}>Tiket Saya</button>}
+            </nav>
+          </div>
+          <div className="flex items-center gap-4">
+            {user ? (
+              <>
+                <div className="text-sm text-[#C0C0C0]">Hai, <span className="font-semibold text-[#F8F8F8]">{user.name}</span></div>
+                <button onClick={logout} className="px-4 py-2 bg-[#1A1A1A] border border-[#D4AF37]/30 text-[#D4AF37] rounded-full hover:bg-[#D4AF37] hover:text-black transition">Logout</button>
+              </>
+            ) : (
+              <button onClick={() => setPage("login")} className="px-6 py-2 bg-[#D4AF37] text-black rounded-full font-bold hover:bg-[#F2D675] shadow-[0_0_15px_rgba(212,175,55,0.4)] transition">Login</button>
+            )}
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto px-4 py-8">
+        {page === "home" && <Home movies={movies} onBook={startBooking} onSeeSchedule={() => setPage("now_playing")} />}
+        {page === "now_playing" && <NowPlaying movies={movies} onBook={startBooking} />}
+        {page === "history" && <TicketHistory tickets={tickets} onViewTicket={(t) => { setTicket(t); setPage("ticket"); }} />}
+        {page === "login" && <Login onLogin={(name) => { login(name); setPage("home"); }} />}
+        {page === "book" && selectedMovie && <Booking movie={selectedMovie} onBack={() => setPage("now_playing")} selectedSchedule={selectedSchedule} setSelectedSchedule={setSelectedSchedule} selectedSeats={selectedSeats} setSelectedSeats={setSelectedSeats} proceedToPayment={proceedToPayment} />}
         
-        // MENINGKATKAN PID: P1 -> P2 -> P3, dst.
-        setNextProcessId((p) => p + 1); 
+        {/* Updated Professional Payment Component */}
+        {page === "payment" && selectedMovie && (
+          <PaymentProfessional
+            movie={selectedMovie}
+            schedule={selectedSchedule}
+            seats={selectedSeats}
+            onBack={() => setPage("book")}
+            onPay={(details) => completePayment(details)}
+          />
+        )}
         
-        setNewProcessSize("");
+        {page === "ticket" && ticket && <TicketView ticket={ticket} onPrint={() => window.print()} />}
+      </main>
 
-        setRecentlyAdded((r) => [...r, alloc.id]);
-        setTimeout(() => {
-            setRecentlyAdded((r) => r.filter((id) => id !== alloc.id));
-        }, 900);
+      <footer className="py-12 border-t border-[#333]">
+        <div className="max-w-6xl mx-auto text-center">
+           <div className="text-[#D4AF37] font-bold text-2xl tracking-wider mb-4">CineX GOLD</div>
+           <p className="text-sm text-gray-500">© {new Date().getFullYear()} CineX GOLD — Tasikmalaya. Experience Cinema like never before.</p>
+        </div>
+      </footer>
+    </div>
+  );
+}
 
-        setNarasi(`Proses P${pid} berhasil dialokasikan.\nMenempati ${sizeNum} KB dari memori.`);
-    };
+// -------------------- NEW PROFESSIONAL PAYMENT COMPONENT --------------------
 
-    const deallocateMemory = (pid) => {
-        // Pada saat dealokasi, nextProcessId TIDAK diubah,
-        // sehingga proses ID berikutnya akan tetap berlanjut (P2, P3,...)
-        const n = memoryBlocks.map((b) => (b.processId === pid ? { ...b, status: "free", processId: undefined } : { ...b }));
-        const merged = coalesceFreeBlocks(n);
-        setMemoryBlocks(merged);
-        setNarasi(`Proses ${pid} dibebaskan.\nBlok kosong digabung otomatis.`);
-    };
+function PaymentProfessional({ movie, schedule, seats, onBack, onPay }) {
+  const [timeLeft, setTimeLeft] = useState(300); // 5 minutes timer
+  const [paymentMethod, setPaymentMethod] = useState("card");
+  const [isLoading, setIsLoading] = useState(false);
+  
+  // Card States
+  const [cardName, setCardName] = useState("");
+  const [cardNumber, setCardNumber] = useState("");
+  const [expiry, setExpiry] = useState("");
+  const [cvv, setCvv] = useState("");
+  
+  // Wallet State
+  const [eWalletNumber, setEWalletNumber] = useState("");
 
-    // ** FUNGSI ANALISIS **
-    const analysisStats = useMemo(() => {
-        const busyBlocks = memoryBlocks.filter((b) => b.status === "busy");
-        const freeBlocks = memoryBlocks.filter((b) => b.status === "free");
-        
-        const totalUsed = busyBlocks.reduce((s, b) => s + b.size, 0);
-        const totalFree = MEMORY_SIZE - totalUsed;
-        const efficiency = MEMORY_SIZE > 0 ? ((totalUsed / MEMORY_SIZE) * 100).toFixed(2) : 0;
-        
-        const internalFrag = 0; 
+  const ticketPrice = movie.price * seats.length;
+  const serviceFee = 3000 * seats.length;
+  const total = ticketPrice + serviceFee;
 
-        const largestFreeBlock = freeBlocks.reduce((max, b) => Math.max(max, b.size), 0);
-        const externalFrag = totalFree > 0 ? totalFree - largestFreeBlock : 0; 
+  useEffect(() => {
+    if (timeLeft > 0) {
+      const timerId = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
+      return () => clearTimeout(timerId);
+    }
+  }, [timeLeft]);
 
-        // Daftar Proses Aktif
-        const activeProcesses = busyBlocks.map(b => ({
-            pid: b.processId,
-            size: b.size,
-            start: b.start,
-            end: b.start + b.size
-        })).sort((a, b) => {
-            // Sortir berdasarkan PID numerik (P1, P2, P3,...)
-            const numA = parseInt(a.pid.substring(1));
-            const numB = parseInt(b.pid.substring(1));
-            return numA - numB;
-        });
-        
-        return {
-            totalUsed,
-            totalFree,
-            efficiency,
-            largestFreeBlock,
-            internalFrag,
-            externalFrag,
-            activeProcesses, 
-        };
-    }, [memoryBlocks]);
-    
-    // Untuk tampilan statistik di visualisasi
-    const stats = { used: analysisStats.totalUsed, free: analysisStats.totalFree };
-    
-    // Fungsi pembantu nama algoritma
-    const getAlgorithmName = (algo) => {
-        if (algo === 'first') return 'First Fit';
-        if (algo === 'best') return 'Best Fit';
-        if (algo === 'worst') return 'Worst Fit';
-        return 'N/A';
+  const formatTime = (seconds) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
+  };
+
+  const handlePayProcess = () => {
+    if (paymentMethod === 'card') {
+      if (!cardName || cardNumber.length < 16 || !expiry || !cvv) {
+        alert("Mohon lengkapi detail kartu kredit dengan benar.");
+        return;
+      }
+    } else {
+      if (!eWalletNumber || eWalletNumber.length < 9) {
+        alert("Mohon masukkan nomor HP/Akun yang valid.");
+        return;
+      }
     }
 
+    setIsLoading(true);
+    // Simulate API delay
+    setTimeout(() => {
+        const details = {
+            method: paymentMethod.toUpperCase(),
+            total: total,
+            cardName: paymentMethod === 'card' ? cardName : null,
+            accountNumber: paymentMethod !== 'card' ? eWalletNumber : null
+        };
+        onPay(details);
+    }, 2000);
+  };
 
-    const MemoryBlock = ({ block }) => {
-        const heightPercentage = `${(block.size / MEMORY_SIZE) * 100}%`;
-        const isFree = block.status === "free";
-        const freeClass = 'bg-red-700/80 border-red-500 text-white'; 
-        const busyClass = 'bg-white/90 border-gray-400 text-gray-800'; 
-        const animateClass = recentlyAdded.includes(block.id) ? 'animate-bounce' : ''; 
+  const methods = [
+    { id: 'card', label: 'Credit/Debit Card', icon: <Icons.CreditCard />, description: 'Visa, Mastercard, JCB' },
+    { id: 'qris', label: 'QRIS', icon: <div className="font-bold text-xs">QR</div>, description: 'Scan with GoPay, OVO, Dana' },
+    { id: 'dana', label: 'DANA', icon: <Icons.Smartphone />, description: 'Direct Debit' },
+    { id: 'ovo', label: 'OVO', icon: <Icons.Smartphone />, description: 'Direct Debit' },
+  ];
 
+  return (
+    <div className="max-w-6xl mx-auto pt-6 pb-20 animate-fade-in">
+        {/* Progress Header */}
+        <div className="flex items-center justify-between mb-8">
+            <button onClick={onBack} className="flex items-center gap-2 text-[#888] hover:text-[#D4AF37] transition">
+                <Icons.ChevronLeft /> Kembali
+            </button>
+            <div className="flex items-center gap-2 bg-[#D4AF37]/10 px-4 py-2 rounded-full border border-[#D4AF37]/20">
+                <Icons.Clock />
+                <span className="text-[#D4AF37] font-mono font-bold text-lg">{formatTime(timeLeft)}</span>
+                <span className="text-xs text-[#888] ml-1">Selesaikan pembayaran</span>
+            </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            {/* LEFT COLUMN: Payment Methods */}
+            <div className="lg:col-span-2 space-y-6">
+                <div className="bg-[#141414] border border-white/5 p-6 rounded-2xl shadow-xl">
+                    <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+                        <Icons.Lock /> Metode Pembayaran
+                    </h2>
+                    
+                    <div className="grid grid-cols-1 gap-4">
+                        {methods.map((method) => (
+                            <div 
+                                key={method.id}
+                                className={`relative overflow-hidden rounded-xl border transition-all duration-300 ${
+                                    paymentMethod === method.id 
+                                    ? 'bg-[#1A1A1A] border-[#D4AF37] shadow-[0_0_15px_rgba(212,175,55,0.1)]' 
+                                    : 'bg-[#0F0F0F] border-white/5 hover:bg-[#1A1A1A] cursor-pointer'
+                                }`}
+                                onClick={() => setPaymentMethod(method.id)}
+                            >
+                                <div className="p-4 flex items-center justify-between">
+                                    <div className="flex items-center gap-4">
+                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${paymentMethod === method.id ? 'bg-[#D4AF37] text-black' : 'bg-[#222] text-[#666]'}`}>
+                                            {method.icon}
+                                        </div>
+                                        <div>
+                                            <div className={`font-semibold ${paymentMethod === method.id ? 'text-white' : 'text-[#888]'}`}>{method.label}</div>
+                                            <div className="text-xs text-[#555]">{method.description}</div>
+                                        </div>
+                                    </div>
+                                    <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${paymentMethod === method.id ? 'border-[#D4AF37]' : 'border-[#444]'}`}>
+                                        {paymentMethod === method.id && <div className="w-3 h-3 bg-[#D4AF37] rounded-full"></div>}
+                                    </div>
+                                </div>
+
+                                {/* EXPANDABLE CONTENT FOR CARD */}
+                                {paymentMethod === 'card' && method.id === 'card' && (
+                                    <div className="px-6 pb-6 pt-2 border-t border-white/5 bg-[#181818]">
+                                        <div className="flex flex-col md:flex-row gap-8 items-start">
+                                            {/* CSS CREDIT CARD VISUALIZATION */}
+                                            <div className="w-full md:w-80 h-48 rounded-xl bg-gradient-to-br from-[#2a2a2a] via-[#1a1a1a] to-black border border-[#D4AF37]/30 relative p-6 shadow-2xl flex flex-col justify-between shrink-0">
+                                                <div className="flex justify-between items-start">
+                                                    <div className="w-12 h-8 bg-[#D4AF37]/20 rounded border border-[#D4AF37]/40"></div> {/* Chip */}
+                                                    <div className="text-[#D4AF37] font-bold italic tracking-widest">VISA</div>
+                                                </div>
+                                                <div className="font-mono text-xl tracking-widest text-white shadow-black drop-shadow-md">
+                                                    {cardNumber || "•••• •••• •••• ••••"}
+                                                </div>
+                                                <div className="flex justify-between items-end">
+                                                    <div>
+                                                        <div className="text-[10px] text-[#888] uppercase tracking-wider">Card Holder</div>
+                                                        <div className="text-sm font-medium text-white tracking-wide uppercase truncate max-w-[150px]">
+                                                            {cardName || "YOUR NAME"}
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <div className="text-[10px] text-[#888] uppercase tracking-wider">Expires</div>
+                                                        <div className="text-sm font-medium text-white tracking-wide">{expiry || "MM/YY"}</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* FORM INPUTS */}
+                                            <div className="w-full space-y-4">
+                                                <div>
+                                                    <label className="text-xs text-[#888] block mb-1">Nomor Kartu</label>
+                                                    <input 
+                                                        type="text" 
+                                                        maxLength="19"
+                                                        value={cardNumber} 
+                                                        onChange={(e) => {
+                                                            const v = e.target.value.replace(/\D/g, '').replace(/(.{4})/g, '$1 ').trim();
+                                                            setCardNumber(v);
+                                                        }}
+                                                        placeholder="0000 0000 0000 0000"
+                                                        className="w-full bg-[#111] border border-[#333] rounded p-3 text-white focus:border-[#D4AF37] outline-none font-mono"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-xs text-[#888] block mb-1">Nama Pemilik</label>
+                                                    <input 
+                                                        type="text" 
+                                                        value={cardName} 
+                                                        onChange={(e) => setCardName(e.target.value.toUpperCase())}
+                                                        placeholder="NAMA LENGKAP"
+                                                        className="w-full bg-[#111] border border-[#333] rounded p-3 text-white focus:border-[#D4AF37] outline-none"
+                                                    />
+                                                </div>
+                                                <div className="flex gap-4">
+                                                    <div className="w-1/2">
+                                                        <label className="text-xs text-[#888] block mb-1">Masa Berlaku</label>
+                                                        <input 
+                                                            type="text" 
+                                                            maxLength="5"
+                                                            value={expiry} 
+                                                            onChange={(e) => {
+                                                                let v = e.target.value.replace(/\D/g, '');
+                                                                if(v.length >= 2) v = v.substring(0,2) + '/' + v.substring(2,4);
+                                                                setExpiry(v);
+                                                            }}
+                                                            placeholder="MM/YY"
+                                                            className="w-full bg-[#111] border border-[#333] rounded p-3 text-white focus:border-[#D4AF37] outline-none text-center"
+                                                        />
+                                                    </div>
+                                                    <div className="w-1/2">
+                                                        <label className="text-xs text-[#888] block mb-1">CVV</label>
+                                                        <input 
+                                                            type="password" 
+                                                            maxLength="3"
+                                                            value={cvv}
+                                                            onChange={(e) => setCvv(e.target.value.replace(/\D/g,''))}
+                                                            placeholder="123"
+                                                            className="w-full bg-[#111] border border-[#333] rounded p-3 text-white focus:border-[#D4AF37] outline-none text-center"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* EXPANDABLE CONTENT FOR WALLETS */}
+                                {paymentMethod === method.id && ['dana', 'ovo', 'gopay'].includes(method.id) && (
+                                     <div className="px-6 pb-6 pt-2 border-t border-white/5 bg-[#181818]">
+                                        <label className="text-xs text-[#888] block mb-1">Nomor HP Terdaftar</label>
+                                        <div className="flex gap-2">
+                                            <span className="bg-[#222] border border-[#333] rounded p-3 text-[#888]">+62</span>
+                                            <input 
+                                                type="tel"
+                                                value={eWalletNumber}
+                                                onChange={(e) => setEWalletNumber(e.target.value.replace(/\D/g,''))}
+                                                placeholder="812 3456 7890"
+                                                className="flex-1 bg-[#111] border border-[#333] rounded p-3 text-white focus:border-[#D4AF37] outline-none"
+                                            />
+                                        </div>
+                                        <p className="text-xs text-[#666] mt-2 flex items-center gap-1">
+                                            <Icons.ShieldCheck /> Pembayaran aman & terenkripsi.
+                                        </p>
+                                     </div>
+                                )}
+                                
+                                {/* QRIS DISPLAY */}
+                                {paymentMethod === 'qris' && method.id === 'qris' && (
+                                    <div className="px-6 pb-6 pt-2 border-t border-white/5 bg-[#181818] flex flex-col items-center text-center">
+                                        <div className="bg-white p-4 rounded-xl mt-4">
+                                            <QRCodeSVG value="PAYMENT-QRIS" />
+                                        </div>
+                                        <p className="text-sm text-[#888] mt-4">Scan QR di atas menggunakan aplikasi pembayaran favorit Anda.</p>
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+
+            {/* RIGHT COLUMN: Order Summary */}
+            <div className="lg:col-span-1">
+                <div className="sticky top-24 bg-[#141414] border border-[#D4AF37]/20 rounded-2xl shadow-2xl overflow-hidden">
+                    <div className="relative h-48">
+                        <img src={movie.image} alt="poster" className="w-full h-full object-cover opacity-60" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-[#141414] to-transparent"></div>
+                        <div className="absolute bottom-4 left-4 right-4">
+                            <h3 className="text-2xl font-bold text-white leading-tight shadow-black drop-shadow-md">{movie.title}</h3>
+                            <div className="text-sm text-[#D4AF37] font-medium mt-1">{movie.genre}</div>
+                        </div>
+                    </div>
+                    
+                    <div className="p-6 space-y-4">
+                        <div className="flex items-start gap-3 pb-4 border-b border-white/5">
+                            <Icons.Calendar />
+                            <div>
+                                <div className="text-sm text-[#888]">Jadwal Tayang</div>
+                                <div className="text-white font-medium">{schedule.date}, {schedule.time}</div>
+                                <div className="text-xs text-[#666]">{schedule.studio}</div>
+                            </div>
+                        </div>
+                         <div className="flex items-start gap-3 pb-4 border-b border-white/5">
+                            <Icons.MapPin />
+                            <div>
+                                <div className="text-sm text-[#888]">Kursi Dipilih ({seats.length})</div>
+                                <div className="text-[#D4AF37] font-bold tracking-wide">{seats.join(', ')}</div>
+                            </div>
+                        </div>
+
+                        <div className="space-y-2 pt-2">
+                            <div className="flex justify-between text-sm">
+                                <span className="text-[#888]">Tiket ({seats.length}x)</span>
+                                <span className="text-white">Rp{ticketPrice.toLocaleString('id-ID')}</span>
+                            </div>
+                             <div className="flex justify-between text-sm">
+                                <span className="text-[#888]">Biaya Layanan</span>
+                                <span className="text-white">Rp{serviceFee.toLocaleString('id-ID')}</span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                                <span className="text-[#888]">Diskon</span>
+                                <span className="text-[#D4AF37]">-Rp0</span>
+                            </div>
+                        </div>
+
+                        <div className="pt-4 border-t border-white/10 mt-2">
+                            <div className="flex justify-between items-center mb-6">
+                                <span className="text-lg font-bold text-white">Total Bayar</span>
+                                <span className="text-2xl font-bold text-[#D4AF37]">Rp{total.toLocaleString('id-ID')}</span>
+                            </div>
+                            
+                            <button 
+                                onClick={handlePayProcess}
+                                disabled={isLoading}
+                                className="w-full py-4 bg-gradient-to-r from-[#D4AF37] to-[#B4941F] text-black font-bold rounded-xl shadow-[0_0_20px_rgba(212,175,55,0.3)] hover:shadow-[0_0_30px_rgba(212,175,55,0.5)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                            >
+                                {isLoading ? (
+                                    <>Processing...</>
+                                ) : (
+                                    <>Bayar Sekarang <Icons.CheckCircle /></>
+                                )}
+                            </button>
+                            <p className="text-center text-[10px] text-[#666] mt-3">
+                                Dengan membayar, Anda menyetujui S&K CineX Gold.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+  );
+}
+
+// -------------------- Existing Components (Unchanged) --------------------
+
+function Login({ onLogin }) {
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+
+  const handleAuth = () => {
+    if (isSignUp) {
+        if (!name || !email || !password || !confirmPassword) { alert("Mohon lengkapi semua data pendaftaran."); return; }
+        if (password !== confirmPassword) { alert("Konfirmasi password tidak cocok."); return; }
+    } else {
+        if (!email && !name) { alert("Mohon isi Email atau ID Pengguna."); return; }
+    }
+    const displayName = name || (email ? email.split('@')[0] : "User");
+    onLogin(displayName);
+  }
+
+  return (
+    <div className="min-h-[80vh] flex items-center justify-center p-4">
+      <div className="flex w-full max-w-5xl bg-[#141414] rounded-3xl shadow-2xl overflow-hidden border border-[#D4AF37]/20 relative">
+        <div className="hidden lg:flex w-1/2 relative bg-black items-center justify-center overflow-hidden">
+             <div className="absolute inset-0 z-0"><img src="https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?q=80&w=2070&auto=format&fit=crop" alt="Cinema Background" className="w-full h-full object-cover opacity-60 scale-110"/> <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent"></div></div>
+             <div className="relative z-10 p-10 text-center">
+                 <div className="inline-block p-3 rounded-full border-2 border-[#D4AF37] mb-6"><svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-[#D4AF37]" viewBox="0 0 20 20" fill="currentColor"><path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z" /></svg></div>
+                 <h2 className="text-4xl font-bold text-[#F8F8F8] mb-4 tracking-wide font-serif">Cinema Reimagined.</h2>
+                 <p className="text-[#C0C0C0] text-lg leading-relaxed">Nikmati pengalaman menonton kelas dunia dengan kenyamanan premium dan teknologi terkini.</p>
+             </div>
+        </div>
+        <div className="w-full lg:w-1/2 p-8 md:p-12 lg:p-16 bg-[#141414] relative">
+            <div className="max-w-md mx-auto">
+                <h2 className="text-3xl font-bold text-[#F8F8F8] mb-2">{isSignUp ? "Bergabung Bersama Kami" : "Selamat Datang Kembali"}</h2>
+                <p className="text-[#888] mb-8">{isSignUp ? "Daftar akun baru untuk akses fitur eksklusif." : "Silakan masukkan detail akun Anda untuk masuk."}</p>
+                <div className="space-y-5">
+                    {isSignUp && (
+                        <div className="group"><label className="block text-xs font-medium text-[#D4AF37] mb-1 uppercase tracking-wider">Nama Lengkap</label><input value={name} onChange={(e) => setName(e.target.value)} className="w-full px-4 py-3 bg-[#1A1A1A] border border-[#333] rounded-lg text-[#F8F8F8] focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37] outline-none transition-all" placeholder="John Doe"/></div>
+                    )}
+                    <div><label className="block text-xs font-medium text-[#D4AF37] mb-1 uppercase tracking-wider">{isSignUp ? "Alamat Email" : "Email / Username"}</label><input value={email} onChange={(e) => setEmail(e.target.value)} className="w-full px-4 py-3 bg-[#1A1A1A] border border-[#333] rounded-lg text-[#F8F8F8] focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37] outline-none transition-all" placeholder="nama@email.com"/></div>
+                    <div><div className="flex justify-between items-center mb-1"><label className="text-xs font-medium text-[#D4AF37] uppercase tracking-wider">Password</label>{!isSignUp && <button className="text-xs text-[#888] hover:text-[#F8F8F8] transition">Lupa Password?</button>}</div><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full px-4 py-3 bg-[#1A1A1A] border border-[#333] rounded-lg text-[#F8F8F8] focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37] outline-none transition-all" placeholder="••••••••"/></div>
+                    {isSignUp && (<div><label className="block text-xs font-medium text-[#D4AF37] mb-1 uppercase tracking-wider">Konfirmasi Password</label><input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="w-full px-4 py-3 bg-[#1A1A1A] border border-[#333] rounded-lg text-[#F8F8F8] focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37] outline-none transition-all" placeholder="••••••••"/></div>)}
+                </div>
+                <div className="mt-8"><button onClick={handleAuth} className="w-full py-3.5 bg-gradient-to-r from-[#D4AF37] to-[#B4941F] text-black font-bold rounded-lg shadow-lg hover:shadow-[#D4AF37]/20 hover:scale-[1.01] transition-all duration-200">{isSignUp ? "Buat Akun" : "Masuk Sekarang"}</button>{!isSignUp && (<button onClick={() => onLogin("Tamu")} className="w-full mt-3 py-3.5 bg-transparent border border-[#333] text-[#888] font-medium rounded-lg hover:border-[#D4AF37] hover:text-[#D4AF37] transition-all duration-200">Masuk sebagai Tamu</button>)}</div>
+                <div className="mt-8 text-center text-sm text-[#888]">{isSignUp ? "Sudah memiliki akun? " : "Belum punya akun? "}<button onClick={() => { setIsSignUp(!isSignUp); setName(""); setEmail(""); setPassword(""); setConfirmPassword(""); }} className="text-[#D4AF37] font-semibold hover:text-[#F2D675] transition ml-1">{isSignUp ? "Login disini" : "Daftar sekarang"}</button></div>
+            </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TicketHistory({ tickets, onViewTicket }) {
+    if (tickets.length === 0) {
         return (
-            <div
-                style={{ height: heightPercentage }}
-                className={`w-full border transition-all duration-300 flex items-center justify-center text-xs font-semibold relative rounded-sm overflow-hidden p-1 ${isFree ? freeClass : busyClass} ${animateClass}`}
-            >
-                <div className="px-1 truncate">{isFree ? `Bebas (${block.size} KB)` : `${block.processId} (${block.size} KB)`}</div>
-
-                {!isFree && (
-                    <button
-                        onClick={() => deallocateMemory(block.processId)}
-                        className="absolute right-1 top-1 px-1 py-0.5 text-[8px] rounded-full bg-gray-800 text-white hover:bg-gray-700 transition"
-                        title="Bebaskan Proses"
-                    >
-                        X
-                    </button>
-                )}
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+                <div className="w-16 h-16 bg-[#1A1A1A] rounded-full flex items-center justify-center mb-4"><span className="text-2xl">🎟️</span></div>
+                <h2 className="text-xl font-bold text-[#F8F8F8]">Belum ada tiket</h2>
+                <p className="text-[#C0C0C0] mt-2 max-w-sm">Anda belum memesan film apapun. Silakan pesan film di menu Sedang Tayang.</p>
             </div>
         );
-    };
-
+    }
     return (
-        <div className="p-6 h-full">
-            <div className="rounded-2xl p-6 shadow-2xl bg-[#161B22]/80 backdrop-blur-md border border-[#20262D]">
-                <div className="flex items-start justify-between gap-4">
-                    <div>
-                        <h2 className="text-2xl font-bold text-white mb-1">Memory Simulator</h2>
-                        <p className="text-sm text-gray-400">First Fit, Best Fit, Worst Fit - Visualisasi Interaktif</p>
+        <section>
+             <div className="bg-[#111111] p-6 rounded-2xl border border-[#D4AF37]/10 mb-8 flex justify-between items-center">
+                <div><h2 className="text-2xl font-bold text-[#F8F8F8] mb-1">🎫 Tiket Saya</h2><p className="text-[#C0C0C0] text-sm">Riwayat pemesanan tiket bioskop Anda.</p></div>
+                <div className="bg-[#1A1A1A] px-4 py-2 rounded text-[#D4AF37] font-bold">{tickets.length} Tiket</div>
+             </div>
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {tickets.map((t, idx) => (
+                    <div key={idx} className="bg-[#141414] border border-[#D4AF37]/20 rounded-xl p-4 flex gap-4 hover:border-[#D4AF37] transition duration-300">
+                        <img src={t.movie.image} alt={t.movie.title} className="w-24 h-32 object-cover rounded-lg flex-shrink-0" />
+                        <div className="flex flex-col justify-between w-full">
+                            <div>
+                                <h3 className="font-bold text-lg text-[#F8F8F8]">{t.movie.title}</h3>
+                                <div className="text-sm text-[#C0C0C0] mt-1 flex items-center gap-2"><span>📅 {t.schedule.date}</span><span>⏰ {t.schedule.time}</span></div>
+                                <div className="text-sm text-[#C0C0C0] mt-1">{t.schedule.studio}</div>
+                            </div>
+                            <div className="flex items-end justify-between mt-3">
+                                <div className="text-sm"><span className="text-gray-500 block text-xs">Kursi</span><span className="text-[#D4AF37] font-semibold">{t.seats.join(', ')}</span></div>
+                                <button onClick={() => onViewTicket(t)} className="px-3 py-1.5 bg-[#1A1A1A] text-[#F8F8F8] border border-[#D4AF37]/30 rounded text-sm hover:bg-[#D4AF37] hover:text-black transition">Lihat QR</button>
+                            </div>
+                        </div>
                     </div>
+                ))}
+             </div>
+        </section>
+    );
+}
 
-                    <div className="text-right text-sm text-gray-400">
-                        Next PID: <span className="font-bold text-blue-400">P{nextProcessId}</span>
-                    </div>
+function Home({ movies, onBook, onSeeSchedule }) {
+  const featuredMovies = movies.slice(0, 3);
+  const [email, setEmail] = useState("");
+  const [isSubscribed, setIsSubscribed] = useState(false);
+
+  const handleSubscribe = () => {
+    if (!email || !email.includes('@')) { alert("Mohon masukkan email yang valid."); return; }
+    setIsSubscribed(true); setEmail("");
+  };
+
+  return (
+    <div className="space-y-16">
+      <div className="relative w-full h-[500px] rounded-3xl overflow-hidden shadow-2xl mb-12 group border border-[#D4AF37]/20">
+        <img src="https://images.unsplash.com/photo-1536440136628-849c177e76a1?q=80&w=2525&auto=format&fit=crop" alt="Hero Background" className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
+        <div className="absolute inset-0 bg-gradient-to-r from-black via-black/70 to-transparent"></div>
+        <div className="relative z-10 h-full flex flex-col justify-center max-w-2xl px-8 md:px-12">
+            <span className="text-[#D4AF37] font-bold tracking-widest uppercase mb-4 text-sm animate-pulse">Cinematic Excellence</span>
+            <h1 className="text-4xl md:text-6xl font-bold text-white mb-6 leading-tight font-serif">Rasakan Magisnya <br /><span className="text-transparent bg-clip-text bg-gradient-to-r from-[#D4AF37] to-[#F2D675]">Layar Lebar</span></h1>
+            <p className="text-gray-300 text-lg mb-8 max-w-lg leading-relaxed">Nikmati film terkini dengan kualitas suara Dolby Atmos, visual 4K Laser, dan kenyamanan kursi premium CineX Gold.</p>
+            <div className="flex gap-4"><button onClick={() => document.getElementById('trending-section').scrollIntoView({ behavior: 'smooth' })} className="px-8 py-3.5 bg-[#D4AF37] text-black font-bold rounded-full hover:bg-[#F2D675] hover:scale-105 transition shadow-lg shadow-[#D4AF37]/20">Pesan Tiket</button><button onClick={onSeeSchedule} className="px-8 py-3.5 border border-white/30 backdrop-blur-sm text-white font-bold rounded-full hover:bg-white/10 transition">Lihat Jadwal</button></div>
+        </div>
+      </div>
+
+      <section className="grid grid-cols-1 md:grid-cols-3 gap-8 px-4">
+         <div className="bg-[#1A1A1A] p-6 rounded-2xl border border-white/5 hover:border-[#D4AF37]/30 transition group"><div className="w-12 h-12 bg-[#222] rounded-full flex items-center justify-center text-2xl mb-4 group-hover:scale-110 transition group-hover:bg-[#D4AF37]/20">🎥</div><h3 className="text-lg font-bold text-white mb-2">4K Laser Projection</h3><p className="text-sm text-gray-400 leading-relaxed">Visual tajam dan warna hidup yang memanjakan mata Anda di setiap adegan.</p></div>
+         <div className="bg-[#1A1A1A] p-6 rounded-2xl border border-white/5 hover:border-[#D4AF37]/30 transition group"><div className="w-12 h-12 bg-[#222] rounded-full flex items-center justify-center text-2xl mb-4 group-hover:scale-110 transition group-hover:bg-[#D4AF37]/20">🔊</div><h3 className="text-lg font-bold text-white mb-2">Dolby Atmos Sound</h3><p className="text-sm text-gray-400 leading-relaxed">Suara 360 derajat yang jernih dan kuat, menempatkan Anda di tengah aksi.</p></div>
+         <div className="bg-[#1A1A1A] p-6 rounded-2xl border border-white/5 hover:border-[#D4AF37]/30 transition group"><div className="w-12 h-12 bg-[#222] rounded-full flex items-center justify-center text-2xl mb-4 group-hover:scale-110 transition group-hover:bg-[#D4AF37]/20">💺</div><h3 className="text-lg font-bold text-white mb-2">Premium Recliners</h3><p className="text-sm text-gray-400 leading-relaxed">Kenyamanan maksimal dengan kursi kulit yang bisa direbahkan sepenuhnya.</p></div>
+      </section>
+
+      <section id="trending-section">
+        <div className="flex items-end justify-between mb-8"><div><span className="text-[#D4AF37] font-bold text-sm tracking-wider uppercase">Pilihan Penonton</span><h2 className="text-3xl font-bold text-[#F8F8F8] mt-1">Film Trending Minggu Ini</h2></div><button className="hidden md:block text-[#D4AF37] hover:text-white transition text-sm font-medium">Lihat Semua &rarr;</button></div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+            {featuredMovies.map((m) => (
+            <div key={m.id} className="group bg-[#141414] rounded-2xl overflow-hidden border border-[#D4AF37]/10 transition hover:border-[#D4AF37]/50 hover:shadow-2xl hover:shadow-[#D4AF37]/10 duration-500 flex flex-col h-full relative">
+                <div className="relative overflow-hidden aspect-[2/3] sm:aspect-video lg:aspect-[4/3]">
+                    <img src={m.image} alt={m.title} className="w-full h-full object-cover transition duration-700 group-hover:scale-110" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#141414] via-transparent to-transparent opacity-80"></div>
+                    <div className="absolute top-4 right-4 bg-[#D4AF37]/90 backdrop-blur text-black text-xs font-bold px-3 py-1 rounded-full shadow-lg">TRENDING #1</div>
                 </div>
-
-                <div className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    {/* Visual */}
-                    <div className="lg:col-span-1">
-                        <div className="rounded-xl p-4 border border-[#20262D] bg-[#0D1117]">
-                            <h3 className="text-lg text-white mb-3 font-semibold">Diagram Memori (Total: {MEMORY_SIZE} KB)</h3>
-                            <div className="h-[480px] rounded-lg overflow-hidden border-2 border-dashed border-gray-700 relative bg-gray-900">
-                                <div className="absolute inset-0 flex flex-col-reverse">
-                                    {sortBlocks(memoryBlocks).map((b) => (
-                                        <MemoryBlock key={b.id} block={b} />
-                                    ))}
-                                </div>
-
-                                <div className="absolute left-3 top-2 text-xs text-gray-500 font-mono flex flex-col justify-between h-full py-2">
-                                    <span>{MEMORY_SIZE} KB</span>
-                                    <span className="self-end mr-2">{MEMORY_SIZE / 2} KB</span>
-                                    <span>0 KB</span>
-                                </div>
-                            </div>
-
-                            <div className="mt-4 grid grid-cols-3 text-center text-sm gap-2 text-gray-400">
-                                <div>
-                                    Total <br />
-                                    <span className="font-bold text-white">{MEMORY_SIZE} KB</span>
-                                </div>
-                                <div>
-                                    Terpakai <br />
-                                    <span className="font-bold text-green-400">{stats.used} KB</span>
-                                </div>
-                                <div>
-                                    Bebas <br />
-                                    <span className="font-bold text-red-400">{stats.free} KB</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Controls + Analysis + List */}
-                    <div className="lg:col-span-2 space-y-6">
-                        {/* Kontrol Alokasi */}
-                        <div className="rounded-xl p-6 border border-[#20262D] bg-[#0D1117] shadow-lg">
-                            <h3 className="text-lg text-white mb-4 font-semibold">Kontrol Alokasi</h3>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
-                                <div>
-                                    <label className="text-sm text-gray-400 mb-1 block">Ukuran Proses (KB)</label>
-                                    <input
-                                        type="number"
-                                        min="1"
-                                        value={newProcessSize}
-                                        onChange={(e) => setNewProcessSize(e.target.value)}
-                                        placeholder="Mis: 150"
-                                        className="w-full px-4 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 focus:ring-blue-500 focus:border-blue-500 transition"
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="text-sm text-gray-400 mb-1 block">Algoritma</label>
-                                    <select
-                                        value={algorithm}
-                                        onChange={(e) => setAlgorithm(e.target.value)}
-                                        className="w-full px-4 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white focus:ring-blue-500 focus:border-blue-500 transition"
-                                    >
-                                        <option value="first">First Fit</option>
-                                        <option value="best">Best Fit</option>
-                                        <option value="worst">Worst Fit</option>
-                                    </select>
-                                </div>
-
-                                <div>
-                                    <button
-                                        onClick={() => allocateMemory(newProcessSize)}
-                                        className="w-full px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 font-bold text-white shadow-md transition"
-                                    >
-                                        Alokasikan
-                                    </button>
-                                </div>
-                            </div>
-
-                            {narasi && (
-                                <div className="mt-4 p-4 rounded-lg bg-blue-900/40 border border-blue-700/60 text-blue-300 font-mono text-sm whitespace-pre-wrap shadow-inner">
-                                    {narasi}
-                                </div>
-                            )}
-                        </div>
-                        
-                        {/* --- TABEL ANALISIS PERFORMA --- */}
-                        <div className="rounded-xl p-6 border border-[#20262D] bg-[#0D1117] shadow-lg">
-                            <h3 className="text-lg text-white mb-4 font-semibold">Analisis Performa Memori</h3>
-                            
-                            {/* Metrik Dasar */}
-                            <div className="overflow-x-auto mb-4">
-                                <table className="min-w-full divide-y divide-gray-700 text-left text-sm text-gray-400">
-                                    <thead className="bg-gray-800">
-                                        <tr>
-                                            <th className="px-4 py-2 font-medium text-white">Metrik</th>
-                                            <th className="px-4 py-2 font-medium text-white">Nilai Saat Ini</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-800">
-                                        <tr className="hover:bg-gray-800/50 transition">
-                                            <td className="px-4 py-2">Algoritma</td>
-                                            <td className="px-4 py-2 font-mono text-blue-400 font-semibold">{getAlgorithmName(algorithm)}</td>
-                                        </tr>
-                                        <tr className="hover:bg-gray-800/50 transition">
-                                            <td className="px-4 py-2">Total Memori</td>
-                                            <td className="px-4 py-2 font-mono text-white">{MEMORY_SIZE} KB</td>
-                                        </tr>
-                                        <tr className="hover:bg-gray-800/50 transition">
-                                            <td className="px-4 py-2">Memori Terpakai</td>
-                                            <td className="px-4 py-2 font-mono text-green-400">{analysisStats.totalUsed} KB</td>
-                                        </tr>
-                                        <tr className="hover:bg-gray-800/50 transition">
-                                            <td className="px-4 py-2">Memori Bebas (Total)</td>
-                                            <td className="px-4 py-2 font-mono text-red-400">{analysisStats.totalFree} KB</td>
-                                        </tr>
-                                        <tr className="hover:bg-gray-800/50 transition">
-                                            <td className="px-4 py-2">Efisiensi Penggunaan Memori</td>
-                                            <td className="px-4 py-2 font-mono text-white/90">{analysisStats.efficiency}%</td>
-                                        </tr>
-                                        <tr className="hover:bg-gray-800/50 transition">
-                                            <td className="px-4 py-2">Fragmentasi Internal</td>
-                                            <td className="px-4 py-2 font-mono text-yellow-500">
-                                                {analysisStats.internalFrag} KB (Ideal)
-                                            </td>
-                                        </tr>
-                                        <tr className="hover:bg-gray-800/50 transition">
-                                            <td className="px-4 py-2">Fragmentasi Eksternal*</td>
-                                            <td className="px-4 py-2 font-mono text-yellow-500">
-                                                {analysisStats.externalFrag} KB
-                                            </td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                                <p className="mt-3 text-xs text-gray-600 italic">*Fragmentasi Eksternal: Total memori bebas yang tersebar dan tidak dapat digunakan untuk alokasi sebesar blok terbesar yang tersedia ({analysisStats.largestFreeBlock} KB).</p>
-                            </div>
-
-                            {/* Daftar Proses Aktif */}
-                            <h4 className="text-md text-white mt-6 mb-3 font-semibold border-t pt-3 border-gray-700">Proses Aktif ({analysisStats.activeProcesses.length})</h4>
-                            <div className="max-h-32 overflow-y-auto">
-                                <table className="min-w-full divide-y divide-gray-700 text-left text-xs text-gray-400">
-                                    <thead className="bg-gray-800">
-                                        <tr>
-                                            <th className="px-3 py-1 font-medium text-white">PID</th>
-                                            <th className="px-3 py-1 font-medium text-white">Ukuran</th>
-                                            <th className="px-3 py-1 font-medium text-white">Range Alamat</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-800">
-                                        {analysisStats.activeProcesses.length > 0 ? (
-                                            analysisStats.activeProcesses.map((p) => (
-                                                <tr key={p.pid} className="hover:bg-gray-800/50 transition">
-                                                    <td className="px-3 py-2 font-mono text-green-400">{p.pid}</td>
-                                                    <td className="px-3 py-2 font-mono text-white">{p.size} KB</td>
-                                                    <td className="px-3 py-2 font-mono text-gray-500">[{p.start} – {p.end}]</td>
-                                                </tr>
-                                            ))
-                                        ) : (
-                                            <tr>
-                                                <td colSpan="3" className="px-3 py-2 text-center italic text-gray-500">
-                                                    Tidak ada proses yang aktif saat ini.
-                                                </td>
-                                            </tr>
-                                        )}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                        {/* --- AKHIR TABEL ANALISIS --- */}
-
-
-                        {/* Block list */}
-                        <div className="rounded-xl p-6 border border-[#20262D] bg-[#0D1117] shadow-lg">
-                            <h3 className="text-lg text-white mb-4 font-semibold">Daftar Blok Memori</h3>
-                            <div className="max-h-56 overflow-y-auto space-y-3 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-gray-900">
-                                {sortBlocks(memoryBlocks).map((b) => (
-                                    <div
-                                        key={b.id}
-                                        className={`p-3 rounded-md flex justify-between items-center text-sm font-mono transition-colors border ${
-                                            b.status === "free" ? "bg-red-900/30 border-red-700/60 text-red-300" : "bg-white/10 border-gray-700 text-white"
-                                        }`}
-                                    >
-                                        <div>
-                                            <span className="text-gray-400">[{b.start} – {b.start + b.size}]</span> • {b.size} KB •{" "}
-                                            <span className={`font-bold ${b.status === "free" ? "text-red-300" : "text-white"}`}>{b.status === "free" ? 'Bebas' : b.processId}</span>
-                                        </div>
-
-                                        {b.status === "busy" && (
-                                            <button onClick={() => deallocateMemory(b.processId)} className="px-3 py-1 rounded bg-red-600 text-white text-xs hover:bg-red-700 transition">
-                                                Bebaskan
-                                            </button>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                            
-                            {/* Legend in the list footer */}
-                            <div className="mt-4 pt-3 border-t border-gray-700 text-xs text-gray-500 flex justify-between items-center">
-                                <div className="flex items-center gap-4">
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-3 h-3 rounded-full bg-red-700 border border-red-500" /> Bebas
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-3 h-3 rounded-full bg-white border border-gray-400" /> Terpakai
-                                    </div>
-                                </div>
-                                <span>Tip: Klik 'X' di visual atau tombol 'Bebaskan' di daftar.</span>
-                            </div>
-                        </div>
+                <div className="p-6 flex flex-col flex-1 -mt-12 relative z-10">
+                    <h3 className="font-bold text-2xl text-[#F8F8F8] mb-2 leading-tight group-hover:text-[#D4AF37] transition">{m.title}</h3>
+                    <div className="flex items-center gap-3 text-sm text-[#888] mb-4"><span className="flex items-center gap-1"><span className="text-[#D4AF37]">★</span> {m.rating}</span><span>•</span><span>{m.genre}</span><span>•</span><span>{m.duration}</span></div>
+                    <p className="text-gray-400 text-sm line-clamp-2 mb-6">{m.synopsis}</p>
+                    <div className="mt-auto flex items-center justify-between pt-4 border-t border-white/5">
+                        <div><span className="block text-xs text-[#666]">Harga Tiket</span><span className="text-[#D4AF37] font-bold text-lg">Rp{m.price.toLocaleString()}</span></div>
+                        <button onClick={() => onBook(m)} className="px-6 py-2 bg-[#F8F8F8] text-black font-bold rounded-lg hover:bg-[#D4AF37] transition duration-300">Pesan</button>
                     </div>
                 </div>
             </div>
+            ))}
         </div>
-    );
-};
+      </section>
 
-/* =========================
-   Home & Developer Components
-   ========================= */
-const Home = () => (
-    <div className="p-6 h-full">
-      <div className="rounded-2xl p-6 shadow-2xl bg-[#161B22]/80 backdrop-blur-md border border-[#20262D]">
-        <h1 className="text-4xl font-extrabold text-white mb-4">✨ Selamat Datang — Memory Visualizer</h1>
-        <p className="text-gray-400 max-w-4xl leading-relaxed text-lg">
-          Aplikasi ini berfungsi sebagai alat bantu untuk memahami konsep **alokasi memori dinamis** dan dampak dari tiga algoritma utama: **First Fit**, **Best Fit**, dan **Worst Fit** dalam sistem operasi.
-        </p>
-  
-        <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="p-5 rounded-lg border border-blue-700/60 bg-blue-900/20 shadow-md">
-            <h3 className="text-xl text-blue-300 font-bold mb-2">Alokasi Memori</h3>
-            <p className="text-gray-300 text-sm">Strategi OS mengelola dan mendistribusikan ruang RAM kepada proses yang berjalan.</p>
-          </div>
-          <div className="p-5 rounded-lg border border-purple-700/60 bg-purple-900/20 shadow-md">
-            <h3 className="text-xl text-purple-300 font-bold mb-2">Fragmentasi</h3>
-            <p className="text-gray-300 text-sm">Kondisi di mana memori bebas terpecah menjadi blok-blok kecil yang tidak dapat dialokasikan secara efektif (Eksternal/Internal).</p>
-          </div>
-          <div className="p-5 rounded-lg border border-green-700/60 bg-green-900/20 shadow-md">
-            <h3 className="text-xl text-green-300 font-bold mb-2">Visual Interaktif</h3>
-            <p className="text-gray-300 text-sm">Lacak alokasi, dealokasi, dan penggabungan blok (coalescing) secara *real-time*.</p>
+      <section className="relative rounded-3xl overflow-hidden py-16 px-8 md:px-16 text-center border border-[#D4AF37]/20">
+         <div className="absolute inset-0"><img src="https://images.unsplash.com/photo-1517604931442-71053e6e2306?q=80&w=2070&auto=format&fit=crop" alt="Cinema Crowd" className="w-full h-full object-cover opacity-20" /><div className="absolute inset-0 bg-gradient-to-r from-[#111] via-[#111]/80 to-[#111]"></div></div>
+         <div className="relative z-10 max-w-3xl mx-auto">
+             <h2 className="text-3xl font-bold text-[#F8F8F8] mb-4">{isSubscribed ? "Selamat Datang di CineX Gold!" : "Gabung Member CineX Gold"}</h2>
+             <p className="text-[#C0C0C0] mb-8">{isSubscribed ? "Terima kasih telah berlangganan. Cek inbox Anda untuk penawaran eksklusif kami." : "Dapatkan akses eksklusif, diskon tiket, popcorn gratis, dan undangan premiere film terbaru langsung di inbox Anda."}</p>
+             {!isSubscribed ? (
+               <div className="flex flex-col sm:flex-row gap-4 justify-center"><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Masukkan email Anda" className="px-6 py-3 bg-white/5 border border-white/10 rounded-full text-white focus:border-[#D4AF37] outline-none w-full sm:w-auto min-w-[300px]" /><button onClick={handleSubscribe} className="px-8 py-3 bg-[#D4AF37] text-black font-bold rounded-full hover:bg-[#F2D675] transition">Daftar Gratis</button></div>
+             ) : (<div className="inline-block px-8 py-3 bg-[#D4AF37]/20 border border-[#D4AF37] text-[#D4AF37] font-bold rounded-full animate-bounce">✓ Member Aktif</div>)}
+         </div>
+      </section>
+    </div>
+  );
+}
+
+function NowPlaying({ movies, onBook }) {
+  const [filter, setFilter] = useState("All");
+  const [searchTerm, setSearchTerm] = useState("");
+  const genres = ["All", ...new Set(movies.map(m => m.genre.split(' / ')[0]))];
+
+  const filteredMovies = movies.filter(m => {
+    const matchesFilter = filter === "All" || m.genre.includes(filter);
+    const matchesSearch = m.title.toLowerCase().includes(searchTerm.toLowerCase());
+    return matchesFilter && matchesSearch;
+  });
+
+  return (
+    <section className="min-h-screen py-8">
+       <div className="flex flex-col md:flex-row items-end justify-between mb-10 gap-6">
+         <div><span className="text-[#D4AF37] font-bold tracking-widest text-xs uppercase">Jadwal Bioskop</span><h2 className="text-4xl font-bold text-white mt-2">Sedang Tayang</h2></div>
+         <div className="relative w-full md:w-auto"><input type="text" placeholder="Cari film..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10 pr-4 py-2 bg-[#1A1A1A] border border-[#333] rounded-full text-sm text-white focus:border-[#D4AF37] outline-none w-full md:w-64 transition-all focus:w-full md:focus:w-80"/><svg className="w-4 h-4 text-gray-500 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg></div>
+       </div>
+
+       <div className="flex flex-wrap gap-3 mb-10 pb-4 border-b border-[#333]">
+         {genres.slice(0, 6).map(g => (
+           <button key={g} onClick={() => setFilter(g)} className={`px-6 py-2 rounded-full text-sm font-medium transition-all duration-300 ${filter === g ? 'bg-[#D4AF37] text-black shadow-[0_0_15px_rgba(212,175,55,0.4)]' : 'bg-[#1A1A1A] text-gray-400 hover:text-white hover:bg-[#252525]'}`}>{g}</button>
+         ))}
+       </div>
+
+      {filteredMovies.length > 0 ? (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6 sm:gap-8">
+            {filteredMovies.map((m) => (
+            <div key={m.id} className="group relative bg-[#121212] rounded-2xl overflow-hidden transition-all duration-500 hover:-translate-y-2 hover:shadow-2xl hover:shadow-[#D4AF37]/10">
+                <div className="relative aspect-[2/3] overflow-hidden">
+                    <img src={m.image} alt={m.title} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 group-hover:blur-[2px]" />
+                    <div className="absolute top-3 left-3 bg-black/60 backdrop-blur-md border border-white/10 px-2 py-1 rounded-md flex items-center gap-1"><span className="text-[#D4AF37] text-xs">★</span><span className="text-white text-xs font-bold">{m.rating}</span></div>
+                    <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col items-center justify-center p-6 text-center">
+                        <p className="text-[#D4AF37] text-sm font-medium mb-2">{m.genre}</p><h3 className="text-white font-bold text-lg mb-4 leading-tight">{m.title}</h3><p className="text-gray-400 text-xs mb-6 line-clamp-3">{m.synopsis}</p><button onClick={() => onBook(m)} className="bg-[#D4AF37] text-black font-bold px-6 py-2.5 rounded-full hover:bg-[#F2D675] hover:scale-105 transition-all w-full">Pesan Tiket</button>
+                    </div>
+                </div>
+                <div className="p-4 bg-[#1A1A1A] border-t border-[#333] group-hover:border-[#D4AF37]/30 transition-colors">
+                    <h3 className="text-white font-bold truncate group-hover:text-[#D4AF37] transition-colors">{m.title}</h3>
+                    <div className="flex items-center justify-between mt-2"><span className="text-gray-500 text-xs">{m.duration}</span><span className="text-[#D4AF37] text-sm font-bold">Rp{m.price.toLocaleString()}</span></div>
+                </div>
+            </div>
+            ))}
+        </div>
+      ) : (<div className="text-center py-20"><div className="text-6xl mb-4">🔍</div><h3 className="text-xl font-bold text-white">Film tidak ditemukan</h3><p className="text-gray-500 mt-2">Coba kata kunci lain atau ubah filter genre.</p></div>)}
+    </section>
+  );
+}
+
+function Booking({ movie, onBack, selectedSchedule, setSelectedSchedule, selectedSeats, setSelectedSeats, proceedToPayment }) {
+  const schedules = movie.schedules;
+  return (
+    <div className="max-w-4xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in">
+      <div className="lg:col-span-2 bg-[#141414] p-6 rounded-2xl border border-[#D4AF37]/10 shadow-lg">
+        <div className="flex flex-col sm:flex-row items-start gap-6">
+          <img src={movie.image} alt="poster" className="w-full sm:w-40 h-56 rounded-lg object-cover flex-shrink-0" />
+          <div className="w-full">
+            <h3 className="text-2xl font-bold text-[#F8F8F8]">{movie.title}</h3>
+            <p className="text-sm text-[#C0C0C0] mt-1">{movie.genre} • {movie.duration} • {movie.rating}</p>
+            <h4 className="mt-6 font-semibold text-[#F8F8F8]">Pilih Jadwal</h4>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {schedules.map((s) => (
+                <button key={s.id} onClick={() => setSelectedSchedule(s)} className={`px-3 py-2 rounded font-medium transition ${selectedSchedule?.id===s.id ? 'bg-[#D4AF37] text-black shadow-md' : 'bg-[#1A1A1A] text-[#C0C0C0] border border-[#D4AF37]/8 hover:bg-[#2A2A2A]'}`}>{s.date.substring(5)} • {s.time} ({s.studio})</button>
+              ))}
+            </div>
+            <h4 className="mt-6 font-semibold text-[#F8F8F8]">Pilih Kursi</h4>
+            <SeatSelector selectedSeats={selectedSeats} setSelectedSeats={setSelectedSeats} rows={6} cols={8} />
+            <div className="mt-6 flex items-center justify-between border-t border-[#D4AF37]/10 pt-4">
+              <button onClick={onBack} className="px-4 py-2 border border-[#D4AF37]/10 rounded text-[#C0C0C0] hover:bg-[#1A1A1A] transition">Kembali</button>
+              <div className="text-right">
+                <div className="text-sm text-[#C0C0C0]">Total Harga ({selectedSeats.length} Kursi)</div>
+                <div className="font-bold text-xl text-[#F8F8F8]">Rp{(selectedSeats.length * movie.price).toLocaleString('id-ID')}</div>
+                <div className="mt-2"><button onClick={proceedToPayment} disabled={!selectedSchedule || selectedSeats.length === 0} className={`px-4 py-2 rounded-lg font-semibold transition ${!selectedSchedule || selectedSeats.length === 0 ? 'bg-gray-700 text-gray-400 cursor-not-allowed' : 'bg-[#D4AF37] text-black hover:bg-[#F2D675]'}`}>Lanjut ke Bayar</button></div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
-    </div>
-);
-
-const Developer = () => (
-    <div className="p-6 h-full">
-      <div className="rounded-2xl p-6 shadow-2xl bg-[#161B22]/80 backdrop-blur-md border border-[#20262D]">
-        <h1 className="text-3xl font-bold text-white mb-4">👨‍💻 Developer & Info</h1>
-        <p className="text-gray-400 text-lg">Aplikasi ini dibuat sebagai alat bantu edukasi.</p>
-  
-        <div className="mt-6 space-y-3">
-          <p className="text-gray-300 text-md">Nama Pengembang: <span className="text-white font-semibold">Alip Mufqi</span></p>
-          <p className="text-gray-300 text-md">Tahun Proyek: <span className="text-white font-semibold">2025</span></p>
-          <p className="text-gray-300 text-md">Tujuan: <span className="text-white font-semibold">Alat Visualisasi OS</span></p>
+      <aside className="lg:col-span-1 bg-[#141414] p-6 rounded-2xl border border-[#D4AF37]/10 shadow-lg h-fit">
+        <h4 className="font-bold text-xl text-[#F8F8F8]">Ringkasan Pesanan</h4>
+        <div className="mt-4 text-sm text-[#C0C0C0] space-y-2">
+          <div className="pb-2 border-b border-[#D4AF37]/5"><span className="font-semibold text-[#F8F8F8]">Film:</span> {movie.title}</div>
+          <div className="pb-2 border-b border-[#D4AF37]/5"><span className="font-semibold text-[#F8F8F8]">Jadwal:</span> {selectedSchedule ? `${selectedSchedule.date.substring(5)} ${selectedSchedule.time} (${selectedSchedule.studio})` : '-'}</div>
+          <div className="pb-2 border-b border-[#D4AF37]/5"><span className="font-semibold text-[#F8F8F8]">Kursi Dipilih:</span> {selectedSeats.length ? selectedSeats.join(', ') : 'Belum ada kursi'}</div>
+          <div className="pt-2 text-lg flex justify-between"><span className="font-bold text-[#F8F8F8]">Total:</span> <span className="font-bold text-[#D4AF37]">Rp{(selectedSeats.length * movie.price).toLocaleString('id-ID')}</span></div>
         </div>
-      </div>
-    </div>
-);
-
-/* =========================
-   Sidebar Component
-   ========================= */
-const Sidebar = ({ page, setPage, isOpen }) => {
-    const menu = [
-      { id: "home", label: "Beranda", icon: <HomeIcon /> },
-      { id: "memory", label: "Simulator", icon: <ChipIcon /> },
-      { id: "developer", label: "Developer", icon: <CodeIcon /> },
-    ];
-  
-    return (
-      <aside
-        className={`
-          ${isOpen ? "w-64" : "w-20"} 
-          min-h-screen p-4 border-r border-[#20262D] bg-[#0D1117] transition-all duration-300 flex flex-col
-        `}
-      >
-        <div className={`mb-8 ${isOpen ? "px-2" : "px-0"}`}>
-          <div className={`text-2xl font-bold text-blue-400 tracking-wide overflow-hidden ${!isOpen && "hidden"}`}>SpaceUI</div>
-          <div className={`text-xs text-gray-500 mt-1 ${!isOpen && "hidden"}`}>Visualizer</div>
-          {!isOpen && <ChipIcon className="mx-auto text-blue-400 w-8 h-8"/>}
-        </div>
-  
-        <nav className="space-y-2 flex-grow">
-          {menu.map((m) => (
-            <button
-              key={m.id}
-              onClick={() => setPage(m.id)}
-              className={`w-full flex items-center ${isOpen ? "justify-start px-4" : "justify-center px-0"} py-3 rounded-xl transition-all duration-200 ${
-                page === m.id ? "bg-blue-600 text-white shadow-xl shadow-blue-900/30" : "text-gray-400 hover:bg-[#161B22] hover:text-white"
-              }`}
-            >
-              <div className={`mr-3 ${!isOpen && "mr-0"}`}>{m.icon}</div>
-              <span className={`font-semibold overflow-hidden whitespace-nowrap ${!isOpen && "hidden"}`}>{m.label}</span>
-            </button>
-          ))}
-        </nav>
-  
-        <div className={`mt-auto text-xs text-gray-600 text-center ${!isOpen && "hidden"}`}>© 2025 Alip Mufqi</div>
       </aside>
-    );
-};
+    </div>
+  );
+}
 
-/* =========================
-   App (single-file container)
-   ========================= */
-export default function App() {
-    const [page, setPage] = useState("home");
-    const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+function SeatSelector({ rows = 6, cols = 8, selectedSeats, setSelectedSeats }) {
+  const seats = [];
+  for (let r = 0; r < rows; r++) {
+    const rowLetter = String.fromCharCode(65 + r);
+    for (let c = 1; c <= cols; c++) seats.push(rowLetter + c);
+  }
+  const initiallyBooked = new Set(["A1","A2","B3","C5", "F8"]);
 
-    const renderPage = () => {
-        if (page === "home") return <Home />;
-        if (page === "memory") return <MemorySimulator />;
-        if (page === "developer") return <Developer />;
-        return <Home />;
-    };
+  const toggleSeat = (s) => {
+    if (initiallyBooked.has(s)) return;
+    if (selectedSeats.includes(s)) { setSelectedSeats(selectedSeats.filter(x => x !== s)); } else { setSelectedSeats([...selectedSeats, s]); }
+  }
 
-    return (
-        <div style={{ minHeight: "100vh", fontFamily: "Inter, sans-serif", backgroundColor: '#0D1117' }} className="relative overflow-hidden text-white">
-            {/* Background (Solid Dark) */}
-            
-            {/* Main layout */}
-            <div className="flex">
-                <Sidebar page={page} setPage={setPage} isOpen={isSidebarOpen} />
-                
-                <main className="flex-1 overflow-auto">
-                    {/* Header / Toggle Button */}
-                    <header className={`p-4 bg-[#161B22]/80 backdrop-blur-sm border-b border-[#20262D] sticky top-0 z-10 transition-all ${isSidebarOpen ? "ml-0" : "ml-0"}`}>
-                        <button 
-                            onClick={() => setIsSidebarOpen(prev => !prev)}
-                            className="p-2 rounded-full bg-gray-800 hover:bg-gray-700 transition"
-                        >
-                            <MenuIcon className="w-5 h-5 text-gray-400"/>
-                        </button>
-                    </header>
+  return (
+    <div className="mt-3">
+      <div className="text-center bg-gray-900 border border-[#D4AF37]/10 text-xs text-[#D4AF37] py-2 rounded-t-lg mb-4 shadow-inner font-mono tracking-widest">LAYAR BIOSKOP</div>
+      <div className="grid gap-3 p-4 border border-[#D4AF37]/10 rounded-b-lg bg-[#111111]" style={{gridTemplateColumns: `repeat(${cols}, minmax(0,1fr))`}}>
+        {seats.map((s) => {
+          const booked = initiallyBooked.has(s);
+          const selected = selectedSeats.includes(s);
+          return (
+            <button key={s} disabled={booked} onClick={() => toggleSeat(s)} className={`text-xs sm:text-sm py-2 rounded-lg font-mono transition duration-150 ease-in-out shadow-md ${booked ? 'bg-[#3A3A3A] text-gray-500 cursor-not-allowed opacity-70' : selected ? 'bg-[#D4AF37] text-black font-bold transform scale-105' : 'bg-[#1A1A1A] text-[#C0C0C0] hover:bg-[#2A2A2A] active:scale-95'}`}>{s}</button>
+          );
+        })}
+      </div>
+      <div className="mt-4 flex flex-wrap gap-4 text-xs text-[#C0C0C0] justify-center">
+        <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 bg-[#1A1A1A] border border-[#D4AF37]/8 rounded-sm"></span> Tersedia</span> 
+        <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 bg-[#D4AF37] rounded-sm"></span> Dipilih</span> 
+        <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 bg-[#3A3A3A] rounded-sm"></span> Terisi</span>
+      </div>
+    </div>
+  );
+}
 
-                    {/* Page Content */}
-                    <div className="fadeIn">{renderPage()}</div>
-                </main>
-            </div>
-
-            {/* Tiny styles included for smoothness */}
-            <style>{`
-                /* Basic resets for this single-file app */
-                :root { --glass: rgba(255,255,255,0.06); }
-                body, html, #root { height: 100%; margin: 0; padding: 0; }
-                /* Animations */
-                .fadeIn { animation: fadeIn 530ms ease both; }
-                @keyframes fadeIn { from { opacity: 0; transform: translateY(6px);} to { opacity:1; transform: translateY(0);} }
-                /* Scrollbar subtle for dark theme */
-                .scrollbar-thin::-webkit-scrollbar { width: 8px; height: 8px; }
-                .scrollbar-thin::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 10px; }
-                .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
-                .animate-bounce {
-                    animation: bounce 1s infinite;
-                }
-                @keyframes bounce {
-                    0%, 100% {
-                        transform: translateY(0);
-                    }
-                    50% {
-                        transform: translateY(-5px);
-                    }
-                }
-            `}</style>
+function TicketView({ ticket, onPrint }) {
+  const paymentMethod = ticket.payment?.method || 'Tidak Diketahui';
+  return (
+    <div className="max-w-3xl mx-auto bg-[#141414] border border-[#D4AF37]/10 p-6 rounded-2xl shadow-xl">
+      <div className="flex items-start justify-between"><div><h2 className="text-2xl font-bold text-[#F8F8F8]">Tiket Anda</h2><p className="text-sm text-[#C0C0C0]">Tunjukkan tiket ini di pintu masuk bioskop.</p></div><div><button onClick={onPrint} className="px-4 py-2 bg-[#D4AF37] text-black rounded hover:bg-[#F2D675] transition">Cetak / Print</button></div></div>
+      <div className="mt-6 border rounded-lg overflow-hidden border-[#D4AF37]/20">
+        <div className="p-6 bg-gradient-to-r from-[#1A1A1A] to-[#111111] text-[#D4AF37] flex flex-col sm:flex-row items-start gap-6"><img src={ticket.movie.image} alt="poster" className="w-24 h-32 object-cover rounded flex-shrink-0" /><div className="flex-grow"><div className="text-xl font-bold text-[#F8F8F8]">{ticket.movie.title}</div><div className="text-sm text-[#C0C0C0]">{ticket.movie.genre} • {ticket.movie.duration} • {ticket.movie.rating}</div><div className="mt-4 text-[#F8F8F8] font-medium">Jadwal: <span className="font-semibold">{ticket.schedule.date} {ticket.schedule.time} ({ticket.schedule.studio})</span></div><div className="text-[#F8F8F8] font-medium">Kursi: <span className="font-semibold text-[#D4AF37]">{ticket.seats.join(', ')}</span></div></div></div>
+        <div className="p-6 bg-[#141414] flex flex-col sm:flex-row items-start sm:items-center justify-between">
+          <div><div className="text-slate-400 text-sm">Nama Pemesan</div><div className="font-bold text-[#F8F8F8] text-lg">{ticket.user.name}</div><div className="text-slate-400 text-sm mt-3">Metode Bayar</div><div className="font-medium text-sm text-[#D4AF37]">{paymentMethod}</div><div className="text-slate-400 text-sm mt-3">Kode Booking</div><div className="font-mono text-base text-[#C0C0C0]">{ticket.code}</div></div>
+          <div className="text-right mt-6 sm:mt-0"><div className="text-slate-400 text-sm">Total Dibayar</div><div className="font-bold text-2xl text-[#F8F8F8]">Rp{ticket.payment?.total?.toLocaleString('id-ID') || (ticket.seats.length * ticket.movie.price).toLocaleString('id-ID')}</div><div className="mt-4"><QRCodeSVG value={ticket.code} /></div></div>
         </div>
-    );
+      </div>
+      <p className="mt-4 text-xs text-[#C0C0C0]">(Simpan atau cetak tiket ini. Demo app — integrasikan backend untuk penyimpanan/validasi nyata.)</p>
+    </div>
+  );
 }
